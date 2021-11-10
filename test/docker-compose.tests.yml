@@ -1,0 +1,20 @@
+version: "2.4"
+
+services:
+  redis:
+    labels:
+      - "integration"
+    networks:
+      - "tests"
+    image: redis:5.0.8-alpine
+    volumes:
+      - redis-volume-test:/data
+    ports:
+      - "6379"
+
+networks:
+  tests:
+    name: "tests"
+
+volumes:
+  redis-volume-test:
