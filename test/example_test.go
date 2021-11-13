@@ -13,9 +13,9 @@ import (
 func TestRedis(t *testing.T) {
 	env := docker.StartEnvironment(
 		&docker.EnvironmentConfig{
-			UpTimeout:       30 * time.Second,
-			DownTimeout:     30 * time.Second,
-			ComposeFilePath: "docker-compose.tests.yml",
+			UpTimeout:        30 * time.Second,
+			DownTimeout:      30 * time.Second,
+			ComposeFilePaths: []string{"docker-compose.tests.yml"},
 		},
 		&docker.ServiceEntry{
 			Name:    "redis",

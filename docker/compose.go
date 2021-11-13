@@ -17,10 +17,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const ProjectID = "tests"
-const Label = "integration"
-const Network = "tests"
-
 type (
 	// Compose an API to access docker-compose
 	Compose struct {
@@ -39,8 +35,8 @@ type (
 		UpTimeout time.Duration
 		// DownTimeout timeout for docker-compose down
 		DownTimeout time.Duration
-		// ComposeFilePath the path to the compose-YAML file
-		ComposeFilePath string
+		// ComposeFilePaths the path to the compose-YAML file(s)
+		ComposeFilePaths []string
 	}
 	// ServiceConfig service/container-level config needed for docker-compose purposes
 	ServiceConfig struct {
@@ -58,8 +54,13 @@ type (
 )
 
 func NewCompose(params ComposeConfig) (*Compose, error) {
-	if _, err := os.Stat(params.Env.ComposeFilePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("compose file not found at %s", params.Env.ComposeFilePath)
+	if len(params.Env.ComposeFilePaths) == 0 {
+		return nil, fmt.Errorf("at least one compose file must be specified")
+	}
+	for _, path := range params.Env.ComposeFilePaths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return nil, fmt.Errorf("compose file not found at %s", path)
+		}
 	}
 	compose := Compose{
 		config:   params,
@@ -74,7 +75,8 @@ func NewCompose(params ComposeConfig) (*Compose, error) {
 }
 
 func (c *Compose) Up() error {
-	args := []string{"-f", c.config.Env.ComposeFilePath, "-p", ProjectID, "up", "-d", "--renew-anon-volumes"}
+	pathsArgs := c.getComposeFileArgs()
+	args := append(pathsArgs, []string{"-p", ProjectID, "up", "-d", "--renew-anon-volumes"}...)
 	args = append(args, c.getServiceNames()...)
 	cmd := exec.Command("docker-compose", args...)
 	if err := runCommand(cmd); err != nil {
@@ -97,7 +99,8 @@ func (c *Compose) Up() error {
 }
 
 func (c *Compose) Down() error {
-	args := []string{"-f", c.config.Env.ComposeFilePath, "-p", ProjectID, "down", "-v"}
+	pathsArgs := c.getComposeFileArgs()
+	args := append(pathsArgs, []string{"-p", ProjectID, "down", "-v"}...)
 	cmd := exec.Command("docker-compose", args...)
 	if err := runCommand(cmd); err != nil {
 		return err
@@ -290,4 +293,13 @@ func (c *Compose) getServiceNames() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+func (c *Compose) getComposeFileArgs() []string {
+	var cmd []string
+	for _, path := range c.config.Env.ComposeFilePaths {
+		cmd = append(cmd, "-f")
+		cmd = append(cmd, path)
+	}
+	return cmd
 }
