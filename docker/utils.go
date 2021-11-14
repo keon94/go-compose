@@ -35,7 +35,7 @@ func GetEndpoint(container *Container) (string, string, error) {
 	}
 	var port string
 	count := 0
-	for publicPort, _ := range ports {
+	for _, publicPort := range ports {
 		if count > 1 {
 			return "", "", errors.New("multiple port bindings found")
 		}
