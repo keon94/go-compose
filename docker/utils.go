@@ -28,6 +28,8 @@ func FindOpenTcpPort() (string, error) {
 	return fmt.Sprintf("%d", port), nil
 }
 
+// GetEndpoint specialized version of GetAllEndpoints where we expect a single unique public port on the container. error
+// is returned if that's not the case.
 func GetEndpoint(container *Container) (string, string, error) {
 	host, ports, err := GetAllEndpoints(container)
 	if err != nil {
@@ -39,14 +41,19 @@ func GetEndpoint(container *Container) (string, string, error) {
 		if count > 1 {
 			return "", "", errors.New("multiple port bindings found")
 		}
-		port = publicPort
+		if len(publicPort) > 1 {
+			return "", "", fmt.Errorf("mulitple public ports found")
+		}
+		port = publicPort[0]
 		count++
 	}
 	logrus.Printf("container: %s is running on host: %s, port: %s", container.Config.Names[0], host, port)
 	return host, port, nil
 }
 
-func GetAllEndpoints(container *Container, internalPorts ...string) (string, map[string]string, error) {
+// GetAllEndpoints returns the public host, and map of private ports to list of public ports. May pass in optional
+// private ports as args to filter out the returned results. None implies return all.
+func GetAllEndpoints(container *Container, privatePorts ...string) (string, map[string][]string, error) {
 	network := container.Config.NetworkSettings.Networks[Network]
 	if network == nil {
 		return "", nil, fmt.Errorf("network not found for container %s", container.Config.Names[0])
@@ -54,7 +61,7 @@ func GetAllEndpoints(container *Container, internalPorts ...string) (string, map
 	if len(container.Config.Ports) == 0 {
 		return "", nil, fmt.Errorf("no ports found for container %s", container.Config.Names[0])
 	}
-	portMap, err := parsePorts(container.Config.Ports, internalPorts...)
+	portMap, err := parsePorts(container.Config.Ports, privatePorts...)
 	if err != nil {
 		return "", nil, fmt.Errorf("error parsing ports for container %s", container.Config.Names[0])
 	}
@@ -173,8 +180,8 @@ func PrintMap(m *sync.Map) string {
 	return str
 }
 
-func parsePorts(ports []types.Port, privatePorts ...string) (map[string]string, error) {
-	portMap := make(map[string]string)
+func parsePorts(ports []types.Port, privatePorts ...string) (map[string][]string, error) {
+	portMap := make(map[string][]string)
 	for _, port := range ports {
 		if len(privatePorts) != 0 {
 			for _, privatePort := range privatePorts {
@@ -183,11 +190,15 @@ func parsePorts(ports []types.Port, privatePorts ...string) (map[string]string, 
 					return nil, err
 				}
 				if port.PrivatePort == uint16(privatePortInt) {
-					portMap[strconv.Itoa(int(port.PrivatePort))] = strconv.Itoa(int(port.PublicPort))
+					key := strconv.Itoa(int(port.PrivatePort))
+					vals := portMap[key]
+					portMap[key] = append(vals, strconv.Itoa(int(port.PublicPort)))
 				}
 			}
 		} else {
-			portMap[strconv.Itoa(int(port.PrivatePort))] = strconv.Itoa(int(port.PublicPort))
+			key := strconv.Itoa(int(port.PrivatePort))
+			vals := portMap[key]
+			portMap[key] = append(vals, strconv.Itoa(int(port.PublicPort)))
 		}
 	}
 	return portMap, nil
