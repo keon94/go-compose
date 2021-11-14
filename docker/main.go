@@ -19,7 +19,8 @@ type (
 		Name string
 		// DisableShutdownLogs set to true to disable printing logs for this container on shutdown (optional)
 		DisableShutdownLogs bool
-		// Handler Function to extract relevant data from the service's container for the test's needs (required)
+		// Handler Function to extract relevant data from the service's container for the test's needs (optional, but
+		// usually needed by tests/consumers)
 		Handler ServiceHandler
 		// Before Function to run before container startup (optional)
 		Before BeforeHandler
@@ -98,9 +99,15 @@ func (e *Environment) invokeServiceHandlers(entries map[string]*ServiceEntry) er
 				PrintLogs(container)
 			}
 		})
-		output, err := config.Handler(container)
-		if err != nil {
-			return err
+		var output interface{}
+		if config.Handler != nil {
+			logrus.Infof("running handler for service %s", serviceName)
+			output, err = config.Handler(container)
+			if err != nil {
+				return err
+			}
+		} else {
+			logrus.Infof("no handler found for service %s", serviceName)
 		}
 		serviceOutputs[serviceName] = output
 	}
