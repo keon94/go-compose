@@ -26,6 +26,8 @@ type (
 		Before BeforeHandler
 		// Before Function to run after container shutdown (optional)
 		After AfterHandler
+		// EnvironmentVars env variables for the service
+		EnvironmentVars map[string]string
 	}
 	BeforeHandler  func() error
 	ServiceHandler func(*Container) (interface{}, error)
@@ -127,7 +129,8 @@ func getServiceConfigs(entries map[string]*ServiceEntry) map[string]*ServiceConf
 	serviceConfigs := make(map[string]*ServiceConfig)
 	for serviceName, entry := range entries {
 		serviceConfigs[serviceName] = &ServiceConfig{
-			Name: entry.Name,
+			Name:            entry.Name,
+			EnvironmentVars: entry.EnvironmentVars,
 		}
 	}
 	return serviceConfigs

@@ -42,6 +42,8 @@ type (
 	ServiceConfig struct {
 		// Name Service name (must correspond to the name found in the compose file)
 		Name string
+		// EnvironmentVars optional set of key-value pairs to pass to the service (note, these must be globally unique)
+		EnvironmentVars map[string]string
 	}
 	// ComposeConfig config needed to get docker-compose and the testing framework going
 	ComposeConfig struct {
@@ -79,6 +81,7 @@ func (c *Compose) Up() error {
 	args := append(pathsArgs, []string{"-p", ProjectID, "up", "-d", "--renew-anon-volumes"}...)
 	args = append(args, c.getServiceNames()...)
 	cmd := exec.Command("docker-compose", args...)
+	cmd.Env = c.getEnvVariables()
 	if err := runCommand(cmd); err != nil {
 		return err
 	}
@@ -279,6 +282,16 @@ func (c *Compose) awaitServiceState(service *ServiceConfig, statusChecker contai
 	if success {
 		errorMap.Delete(service) // in case we had anything
 	}
+}
+
+func (c *Compose) getEnvVariables() []string {
+	var envs []string
+	for _, cfg := range c.config.Services {
+		for k, v := range cfg.EnvironmentVars {
+			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	return envs
 }
 
 func runCommand(cmd *exec.Cmd) error {
