@@ -8,9 +8,12 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/docker/docker/api/types"
 
 	"github.com/sirupsen/logrus"
 )
@@ -26,17 +29,41 @@ func FindOpenTcpPort() (string, error) {
 }
 
 func GetEndpoint(container *Container) (string, string, error) {
+	host, ports, err := GetAllEndpoints(container)
+	if err != nil {
+		return "", "", err
+	}
+	var port string
+	count := 0
+	for publicPort, _ := range ports {
+		if count > 1 {
+			return "", "", errors.New("multiple port bindings found")
+		}
+		port = publicPort
+		count++
+	}
+	logrus.Printf("container: %s is running on host: %s, port: %s", container.Config.Names[0], host, port)
+	return host, port, nil
+}
+
+func GetAllEndpoints(container *Container, internalPorts ...string) (string, map[string]string, error) {
 	network := container.Config.NetworkSettings.Networks[Network]
 	if network == nil {
-		return "", "", errors.New("network not found")
+		return "", nil, fmt.Errorf("network not found for container %s", container.Config.Names[0])
 	}
-	port := fmt.Sprintf("%d", container.Config.Ports[0].PublicPort)
+	if len(container.Config.Ports) == 0 {
+		return "", nil, fmt.Errorf("no ports found for container %s", container.Config.Names[0])
+	}
+	portMap, err := parsePorts(container.Config.Ports, internalPorts...)
+	if err != nil {
+		return "", nil, fmt.Errorf("error parsing ports for container %s", container.Config.Names[0])
+	}
 	host := "127.0.0.1"
 	if runtime.GOOS == "linux" && !isWSL() {
 		host = network.Gateway
 	}
-	logrus.Printf("container: %s is running on host: %s, port: %s", container.Config.Names[0], host, port)
-	return host, port, nil
+	logrus.Printf("container: %s is running on host: %s, port-bindings: %v", container.Config.Names[0], host, container.Config.Ports)
+	return host, portMap, nil
 }
 
 func isWSL() bool {
@@ -144,6 +171,26 @@ func PrintMap(m *sync.Map) string {
 		return true
 	})
 	return str
+}
+
+func parsePorts(ports []types.Port, privatePorts ...string) (map[string]string, error) {
+	portMap := make(map[string]string)
+	for _, port := range ports {
+		if len(privatePorts) != 0 {
+			for _, privatePort := range privatePorts {
+				privatePortInt, err := strconv.ParseInt(privatePort, 10, 16)
+				if err != nil {
+					return nil, err
+				}
+				if port.PrivatePort == uint16(privatePortInt) {
+					portMap[strconv.Itoa(int(port.PrivatePort))] = strconv.Itoa(int(port.PublicPort))
+				}
+			}
+		} else {
+			portMap[strconv.Itoa(int(port.PrivatePort))] = strconv.Itoa(int(port.PublicPort))
+		}
+	}
+	return portMap, nil
 }
 
 type ContainerStatusCode uint8
