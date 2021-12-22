@@ -297,7 +297,6 @@ func (c *Compose) getEnvVariables() []string {
 func runCommand(cmd *exec.Cmd) error {
 	return RunProcessWithLogs(cmd, func(msg string) {
 		ColoredPrintf(msg + "\n")
-		//fmt.Printf("%s\n", msg)
 	})
 }
 
