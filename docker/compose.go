@@ -295,9 +295,10 @@ func (c *Compose) getEnvVariables() []string {
 }
 
 func runCommand(cmd *exec.Cmd) error {
-	stdout, err := cmd.CombinedOutput()
-	fmt.Printf("%s\n", stdout)
-	return err
+	return RunProcessWithLogs(cmd, func(msg string) {
+		ColoredPrintf(msg + "\n")
+		//fmt.Printf("%s\n", msg)
+	})
 }
 
 func (c *Compose) getServiceNames() []string {

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -178,6 +180,31 @@ func PrintMap(m *sync.Map) string {
 		return true
 	})
 	return str
+}
+
+func RunProcessWithLogs(cmd *exec.Cmd, logHandler func(msg string)) error {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	if err = cmd.Start(); err != nil {
+		return err
+	}
+	logger := func(pipe io.ReadCloser) {
+		scanner := bufio.NewScanner(pipe)
+		scanner.Split(bufio.ScanLines)
+		for scanner.Scan() {
+			m := scanner.Text()
+			logHandler(m)
+		}
+	}
+	go logger(stdout)
+	go logger(stderr)
+	return nil
 }
 
 func parsePorts(ports []types.Port, privatePorts ...string) (map[string][]string, error) {
