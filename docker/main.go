@@ -2,8 +2,6 @@ package docker
 
 import (
 	"fmt"
-
-	"github.com/sirupsen/logrus"
 )
 
 type (
@@ -28,6 +26,8 @@ type (
 		After AfterHandler
 		// EnvironmentVars env variables for the service
 		EnvironmentVars map[string]string
+		// Network optional network name, otherwise defaults to the Network const
+		Network string
 	}
 	BeforeHandler  func() error
 	ServiceHandler func(*Container) (interface{}, error)
@@ -43,7 +43,7 @@ func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Envi
 		Services: serviceConfigs,
 	})
 	if err != nil {
-		logrus.Fatal(err)
+		logger.Fatal(err)
 	}
 	env := &Environment{
 		compose:       compose,
@@ -57,18 +57,23 @@ func (e *Environment) start(beforeHandlers []BeforeHandler, entries map[string]*
 	_ = e.compose.Down() //do this in case of a running state...
 	for _, before := range beforeHandlers {
 		if err := before(); err != nil {
-			logrus.Fatal(err)
+			logger.Fatal(err)
 		}
 	}
+	e.addShutdownHooks(entries, func(config *ServiceEntry, container *Container) {
+		if !config.DisableShutdownLogs {
+			PrintLogs(container)
+		}
+	})
 	err := e.compose.Up()
 	if err != nil {
 		e.Shutdown()
-		logrus.Fatal(err)
+		logger.Fatal(err)
 	}
 	err = e.invokeServiceHandlers(entries)
 	if err != nil {
 		e.Shutdown()
-		logrus.Fatal(err)
+		logger.Fatal(err)
 	}
 }
 
@@ -79,10 +84,29 @@ func (e *Environment) Shutdown() {
 	}
 	err := e.compose.Down()
 	if err != nil {
-		logrus.Error(err)
+		logger.Error(err)
 	}
 	for _, after := range e.afterHandlers {
 		after()
+	}
+}
+
+func (e *Environment) addShutdownHooks(entries map[string]*ServiceEntry, hook func(config *ServiceEntry, container *Container)) {
+	for _, config := range entries {
+		config := config
+		e.shutdownHooks = append(e.shutdownHooks, func() {
+			container, err := e.compose.GetContainer(config.Name)
+			if container == nil {
+				return
+			}
+			if err != nil {
+				logger.Errorf("can't run container shutdown hook. err getting container for service %s", config.Name)
+			}
+			if container == nil {
+				logger.Errorf("can't run container shutdown hook. no container found for service %s", config.Name)
+			}
+			hook(config, container)
+		})
 	}
 }
 
@@ -96,20 +120,15 @@ func (e *Environment) invokeServiceHandlers(entries map[string]*ServiceEntry) er
 		if container == nil {
 			return fmt.Errorf("no container found for service %s", serviceName)
 		}
-		e.shutdownHooks = append(e.shutdownHooks, func() {
-			if !config.DisableShutdownLogs {
-				PrintLogs(container)
-			}
-		})
 		var output interface{}
 		if config.Handler != nil {
-			logrus.Infof("running handler for service %s", serviceName)
+			logger.Infof("running handler for service %s", serviceName)
 			output, err = config.Handler(container)
 			if err != nil {
 				return err
 			}
 		} else {
-			logrus.Infof("no handler found for service %s", serviceName)
+			logger.Infof("no handler found for service %s", serviceName)
 		}
 		serviceOutputs[serviceName] = output
 	}
@@ -128,10 +147,15 @@ func mapServiceEntries(entries ...*ServiceEntry) map[string]*ServiceEntry {
 func getServiceConfigs(entries map[string]*ServiceEntry) map[string]*ServiceConfig {
 	serviceConfigs := make(map[string]*ServiceConfig)
 	for serviceName, entry := range entries {
-		serviceConfigs[serviceName] = &ServiceConfig{
+		cfg := &ServiceConfig{
 			Name:            entry.Name,
 			EnvironmentVars: entry.EnvironmentVars,
+			Network:         entry.Network,
 		}
+		if cfg.Network == "" {
+			cfg.Network = DefaultNetwork
+		}
+		serviceConfigs[serviceName] = cfg
 	}
 	return serviceConfigs
 }

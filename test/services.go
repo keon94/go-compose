@@ -11,7 +11,7 @@ import (
 )
 
 func GetRedisClient(container *docker.Container) (interface{}, error) {
-	host, ports, err := docker.GetAllEndpoints(container)
+	host, ports, err := container.GetAllEndpoints()
 	if err != nil {
 		return "", err
 	}

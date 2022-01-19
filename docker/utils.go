@@ -9,7 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,51 +28,6 @@ func FindOpenTcpPort() (string, error) {
 	defer listener.Close()
 	port := listener.Addr().(*net.TCPAddr).Port
 	return fmt.Sprintf("%d", port), nil
-}
-
-// GetEndpoint specialized version of GetAllEndpoints where we expect a single unique public port on the container. error
-// is returned if that's not the case.
-func GetEndpoint(container *Container) (string, string, error) {
-	host, ports, err := GetAllEndpoints(container)
-	if err != nil {
-		return "", "", err
-	}
-	var port string
-	count := 0
-	for _, publicPort := range ports {
-		if count > 1 {
-			return "", "", errors.New("multiple port bindings found")
-		}
-		if len(publicPort) > 1 {
-			return "", "", fmt.Errorf("mulitple public ports found")
-		}
-		port = publicPort[0]
-		count++
-	}
-	logrus.Printf("container: %s is running on host: %s, port: %s", container.Config.Names[0], host, port)
-	return host, port, nil
-}
-
-// GetAllEndpoints returns the public host, and map of private ports to list of public ports. May pass in optional
-// private ports as args to filter out the returned results. None implies return all.
-func GetAllEndpoints(container *Container, privatePorts ...string) (string, map[string][]string, error) {
-	network := container.Config.NetworkSettings.Networks[Network]
-	if network == nil {
-		return "", nil, fmt.Errorf("network not found for container %s", container.Config.Names[0])
-	}
-	if len(container.Config.Ports) == 0 {
-		return "", nil, fmt.Errorf("no ports found for container %s", container.Config.Names[0])
-	}
-	portMap, err := parsePorts(container.Config.Ports, privatePorts...)
-	if err != nil {
-		return "", nil, fmt.Errorf("error parsing ports for container %s", container.Config.Names[0])
-	}
-	host := "127.0.0.1"
-	if runtime.GOOS == "linux" && !isWSL() {
-		host = network.Gateway
-	}
-	logrus.Printf("container: %s is running on host: %s, port-bindings: %v", container.Config.Names[0], host, container.Config.Ports)
-	return host, portMap, nil
 }
 
 func isWSL() bool {
@@ -229,6 +184,31 @@ func parsePorts(ports []types.Port, privatePorts ...string) (map[string][]string
 		}
 	}
 	return portMap, nil
+}
+
+func runCommand(cmd *exec.Cmd, timeout ...time.Duration) error {
+	if err := RunProcessWithLogs(cmd, func(msg string) {
+		ColoredPrintf(msg + "\n")
+	}); err != nil {
+		return err
+	}
+	if len(timeout) == 0 {
+		return cmd.Wait()
+	}
+	waiter := time.After(timeout[0])
+	done := make(chan error)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	select {
+	case <-waiter:
+		return fmt.Errorf("process did not complete within the timeout\n%s", string(debug.Stack()))
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("process returned error: %w\n%s", err, string(debug.Stack()))
+		}
+		return nil
+	}
 }
 
 type ContainerStatusCode uint8
