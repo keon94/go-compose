@@ -10,14 +10,11 @@ import (
 	"os"
 	"os/exec"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
-
-	"github.com/sirupsen/logrus"
 )
 
 func FindOpenTcpPort() (string, error) {
@@ -114,7 +111,7 @@ func IsEmpty(m *sync.Map) bool {
 func PrintLogs(container *Container) {
 	logs, err := container.Logs()
 	if err != nil {
-		logrus.Errorf("Couldn't get logs for service=%s", container.Config.Names[0])
+		logger.Errorf("Couldn't get logs for service=%s", container.Config.Names[0])
 	} else {
 		ColoredPrintf(fmt.Sprintf("============================%s logs============================\n", container.Config.Names[0]))
 		fmt.Printf("%s\n", logs)
@@ -162,26 +159,12 @@ func RunProcessWithLogs(cmd *exec.Cmd, logHandler func(msg string)) error {
 	return nil
 }
 
-func parsePorts(ports []types.Port, privatePorts ...string) (map[string][]string, error) {
-	portMap := make(map[string][]string)
+func parsePorts(ports []types.Port) (map[int][]int, error) {
+	portMap := make(map[int][]int)
 	for _, port := range ports {
-		if len(privatePorts) != 0 {
-			for _, privatePort := range privatePorts {
-				privatePortInt, err := strconv.ParseInt(privatePort, 10, 16)
-				if err != nil {
-					return nil, err
-				}
-				if port.PrivatePort == uint16(privatePortInt) {
-					key := strconv.Itoa(int(port.PrivatePort))
-					vals := portMap[key]
-					portMap[key] = append(vals, strconv.Itoa(int(port.PublicPort)))
-				}
-			}
-		} else {
-			key := strconv.Itoa(int(port.PrivatePort))
-			vals := portMap[key]
-			portMap[key] = append(vals, strconv.Itoa(int(port.PublicPort)))
-		}
+		key := int(port.PrivatePort)
+		vals := portMap[key]
+		portMap[key] = append(vals, int(port.PublicPort))
 	}
 	return portMap, nil
 }
@@ -224,4 +207,24 @@ const (
 type ContainerStatus struct {
 	Error error
 	Code  ContainerStatusCode
+}
+
+type (
+	Endpoints interface {
+		GetHost() string
+		GetPublicPorts(privatePort int) []int
+	}
+
+	endpoints struct {
+		host  string
+		ports map[int][]int
+	}
+)
+
+func (p *endpoints) GetHost() string {
+	return p.host
+}
+
+func (p *endpoints) GetPublicPorts(privatePort int) []int {
+	return p.ports[privatePort]
 }

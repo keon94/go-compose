@@ -2,11 +2,9 @@ package docker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-	"github.com/sirupsen/logrus"
 	"io"
 	"runtime"
 	"strings"
@@ -107,47 +105,28 @@ func (c *Container) Exec(cmd string) ([]string, error) {
 	return lines, nil
 }
 
-// GetAllEndpoints returns the public host, and map of private ports to list of public ports. May pass in optional
+// GetEndpoints returns the public host, and map of private ports to list of public ports. May pass in optional
 // private ports as args to filter out the returned results. None implies return all.
-func (c *Container) GetAllEndpoints(privatePorts ...string) (string, map[string][]string, error) {
+func (c *Container) GetEndpoints(privatePorts ...int) (Endpoints, error) {
 	network := c.Config.NetworkSettings.Networks[c.ServiceConfig.Network]
 	if network == nil {
-		return "", nil, fmt.Errorf("network not found for container %s", c.Config.Names[0])
+		return nil, fmt.Errorf("network not found for container %s", c.Config.Names[0])
 	}
 	if len(c.Config.Ports) == 0 {
-		return "", nil, fmt.Errorf("no ports found for container %s", c.Config.Names[0])
+		return nil, fmt.Errorf("no ports found for container %s", c.Config.Names[0])
 	}
-	portMap, err := parsePorts(c.Config.Ports, privatePorts...)
+	portMap, err := parsePorts(c.Config.Ports)
 	if err != nil {
-		return "", nil, fmt.Errorf("error parsing ports for container %s", c.Config.Names[0])
+		return nil, fmt.Errorf("error parsing ports for container %s", c.Config.Names[0])
 	}
 	host := "127.0.0.1"
 	if runtime.GOOS == "linux" && !isWSL() {
 		host = network.Gateway
 	}
-	logrus.Printf("container: %s is running on host: %s, port-bindings: %v", c.Config.Names[0], host, c.Config.Ports)
-	return host, portMap, nil
-}
-
-// GetEndpoint specialized version of GetAllEndpoints where we expect a single unique public port on the container. error
-// is returned if that's not the case.
-func (c *Container) GetEndpoint() (string, string, error) {
-	host, ports, err := c.GetAllEndpoints()
-	if err != nil {
-		return "", "", err
+	logger.Printf("container: %s is running on host: %s, port-bindings: %v", c.Config.Names[0], host, c.Config.Ports)
+	mapping := endpoints{
+		host:  host,
+		ports: portMap,
 	}
-	var port string
-	count := 0
-	for _, publicPort := range ports {
-		if count > 1 {
-			return "", "", errors.New("multiple port bindings found")
-		}
-		if len(publicPort) > 1 {
-			return "", "", fmt.Errorf("mulitple public ports found")
-		}
-		port = publicPort[0]
-		count++
-	}
-	logrus.Printf("container: %s is running on host: %s, port: %s", c.Config.Names[0], host, port)
-	return host, port, nil
+	return &mapping, nil
 }
