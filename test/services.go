@@ -20,6 +20,7 @@ func GetRedisClient(container *docker.Container) (interface{}, error) {
 	for _, publicPort := range endpoints.GetPublicPorts(6379) {
 		connString = fmt.Sprintf("%s:%d", endpoints.GetHost(), publicPort)
 		conn = redis.NewClient(&redis.Options{Addr: connString})
+		err = conn.Ping().Err()
 		if err == nil {
 			break
 		}
