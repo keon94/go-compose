@@ -59,10 +59,34 @@ func GetRedisClient(container *docker.Container) (interface{}, error) {
 		connString = ""
 	}
 	if connString == "" {
-		return nil, fmt.Errorf("no valid redis connection could be establised")
+		return nil, fmt.Errorf("no valid redis connection could be established")
 	}
 	return conn, nil
 }
+```
+
+The docker-compose content:
+```yaml
+version: "2.4"
+
+services:
+  redis:
+    labels:
+      - "integration"
+    networks:
+      - "tests"
+    image: redis:5.0.8-alpine
+    volumes:
+      - redis-volume-test:/data
+    ports:
+      - "6379"
+
+networks:
+  tests:
+    name: "tests"
+
+volumes:
+  redis-volume-test:
 ```
 
 Notes:
