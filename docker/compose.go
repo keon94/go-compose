@@ -12,7 +12,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
-	"github.com/sirupsen/logrus"
 )
 
 type (
@@ -90,7 +89,7 @@ func (c *Compose) Up() error {
 	if err := c.awaitState(timeout, c.awaitStart); err != nil {
 		return fmt.Errorf("error with compose-up: %w", err)
 	}
-	logrus.Infof("Brought up services %v", c.getServiceNames())
+	logger.Infof("Brought up services %v", c.getServiceNames())
 	for _, service := range c.config.Services {
 		c.services[service.Name] = ""
 	}
@@ -109,7 +108,7 @@ func (c *Compose) Down() error {
 	if err := c.awaitState(timeout, c.awaitStop); err != nil {
 		return fmt.Errorf("error with compose-down: %w", err)
 	}
-	logrus.Infof("Brought down services %v", c.getServiceNames())
+	logger.Infof("Brought down services %v", c.getServiceNames())
 	return nil
 }
 
