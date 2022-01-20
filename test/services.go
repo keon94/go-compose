@@ -23,8 +23,8 @@ func GetRedisClient(container *docker.Container) (interface{}, error) {
 		if err == nil {
 			break
 		}
-		connString = ""
 		logrus.Infof("redis connection \"%s\" failed with %s. trying another if available.", connString, err.Error())
+		connString = ""
 	}
 	if connString == "" {
 		return nil, fmt.Errorf("no valid redis connection could be establised")
