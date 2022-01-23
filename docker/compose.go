@@ -17,9 +17,8 @@ import (
 type (
 	// Compose an API to access docker-compose
 	Compose struct {
-		cli      *client.Client
-		config   ComposeConfig
-		services map[string]string
+		cli    *client.Client
+		config ComposeConfig
 	}
 
 	// EnvironmentConfig global-level (i.e. for all containers) config for the testing framework
@@ -64,8 +63,7 @@ func NewCompose(params ComposeConfig) (*Compose, error) {
 		}
 	}
 	compose := Compose{
-		config:   params,
-		services: make(map[string]string),
+		config: params,
 	}
 	var err error
 	compose.cli, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -86,13 +84,49 @@ func (c *Compose) Up() error {
 		return err
 	}
 	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
-	if err := c.awaitState(timeout, c.awaitStart); err != nil {
+	if err := awaitState(c.getServiceConfigs(), timeout, c.awaitStart); err != nil {
 		return fmt.Errorf("error with compose-up: %w", err)
 	}
 	logger.Infof("Brought up services %v", c.getServiceNames())
-	for _, service := range c.config.Services {
-		c.services[service.Name] = ""
+	return nil
+}
+
+func (c *Compose) Start(services ...*ServiceConfig) error {
+	if len(services) == 0 {
+		return nil
 	}
+	c.addServiceConfigs(services...)
+	pathsArgs := c.getComposeFileArgs()
+	args := append(pathsArgs, []string{"-p", ProjectID, "up", "-d"}...)
+	args = append(args, c.getServiceNames()...)
+	cmd := exec.Command("docker-compose", args...)
+	cmd.Env = c.getEnvVariables()
+	startTime := time.Now()
+	if err := runCommand(cmd, c.config.Env.UpTimeout); err != nil {
+		return err
+	}
+	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
+	if err := awaitState(services, timeout, c.awaitStart); err != nil {
+		return fmt.Errorf("error with compose-up: %w", err)
+	}
+	logger.Infof("started services %v", c.getServiceNames())
+	return nil
+}
+
+func (c *Compose) Stop(services ...string) error {
+	pathsArgs := c.getComposeFileArgs()
+	args := append(pathsArgs, []string{"-p", ProjectID, "rm", "-s", "-f"}...)
+	args = append(args, services...)
+	cmd := exec.Command("docker-compose", args...)
+	startTime := time.Now()
+	if err := runCommand(cmd, c.config.Env.DownTimeout); err != nil {
+		return err
+	}
+	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
+	if err := awaitState(c.getServiceConfigs(services...), timeout, c.awaitStop); err != nil {
+		return fmt.Errorf("error with compose-down: %w", err)
+	}
+	logger.Infof("stopped services %v", c.getServiceNames())
 	return nil
 }
 
@@ -105,7 +139,7 @@ func (c *Compose) Down() error {
 		return err
 	}
 	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
-	if err := c.awaitState(timeout, c.awaitStop); err != nil {
+	if err := awaitState(c.getServiceConfigs(), timeout, c.awaitStop); err != nil {
 		return fmt.Errorf("error with compose-down: %w", err)
 	}
 	logger.Infof("Brought down services %v", c.getServiceNames())
@@ -135,13 +169,13 @@ func (c *Compose) GetContainer(service string) (*Container, error) {
 	}, nil
 }
 
-func (c *Compose) awaitState(timeout time.Duration, serviceFn func(service *ServiceConfig, timeout <-chan time.Time) error) error {
+func awaitState(services []*ServiceConfig, timeout time.Duration, serviceFn func(service *ServiceConfig, timeout <-chan time.Time) error) error {
 	pool := new(sync.WaitGroup)
 	waiter := make(chan interface{})
 	errorMap := new(sync.Map)
-	pool.Add(len(c.config.Services))
+	pool.Add(len(services))
 	timer := time.After(timeout)
-	for _, service := range c.config.Services {
+	for _, service := range services {
 		service := service
 		go func() {
 			err := serviceFn(service, timer)
@@ -230,6 +264,30 @@ func (c *Compose) getServiceNames() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+func (c *Compose) addServiceConfigs(services ...*ServiceConfig) {
+	for _, service := range services {
+		c.config.Services[service.Name] = service
+	}
+}
+
+func (c *Compose) getServiceConfigs(services ...string) []*ServiceConfig {
+	var configs []*ServiceConfig
+	contains := func(name string) bool {
+		for _, s := range services {
+			if s == name {
+				return true
+			}
+		}
+		return false
+	}
+	for _, config := range c.config.Services {
+		if len(services) == 0 || contains(config.Name) {
+			configs = append(configs, config)
+		}
+	}
+	return configs
 }
 
 func (c *Compose) getComposeFileArgs() []string {
