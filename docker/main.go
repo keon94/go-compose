@@ -35,9 +35,7 @@ type (
 )
 
 func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Environment {
-	services := mapServiceEntries(entries...)
-	beforeHandlers, afterHandlers := getHandlers(services)
-	serviceConfigs := getServiceConfigs(services)
+	serviceConfigs := getServiceConfigsMap(mapServiceEntries(entries...))
 	compose, err := NewCompose(ComposeConfig{
 		Env:      config,
 		Services: serviceConfigs,
@@ -46,35 +44,81 @@ func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Envi
 		logger.Fatal(err)
 	}
 	env := &Environment{
-		compose:       compose,
-		afterHandlers: afterHandlers,
+		compose: compose,
 	}
-	env.start(beforeHandlers, services)
+	_ = env.compose.Down() //do this in case of a running state...
+	err = env.startServices(func(configs []*ServiceConfig) error {
+		err = env.compose.Up()
+		if err != nil {
+			env.Shutdown()
+			return err
+		}
+		err = env.invokeServiceHandlers(entries...)
+		if err != nil {
+			env.Shutdown()
+			return err
+		}
+		return nil
+	}, entries...)
+	if err != nil {
+		logger.Fatal(err)
+	}
 	return env
 }
 
-func (e *Environment) start(beforeHandlers []BeforeHandler, entries map[string]*ServiceEntry) {
-	_ = e.compose.Down() //do this in case of a running state...
+func (e *Environment) StartServices(entries ...*ServiceEntry) error {
+	return e.startServices(func(configs []*ServiceConfig) error {
+		err := e.compose.Start(configs...)
+		if err != nil {
+			if stopErr := e.StopServices(getServiceNames(configs)...); stopErr != nil {
+				logger.Warnf("could not call stop successfuly: %v", stopErr)
+			}
+			return err
+		}
+		err = e.invokeServiceHandlers(entries...)
+		if err != nil {
+			if stopErr := e.StopServices(getServiceNames(configs)...); stopErr != nil {
+				logger.Warnf("could not call stop successfuly: %v", stopErr)
+			}
+			return err
+		}
+		return nil
+	}, entries...)
+}
+
+func (e *Environment) startServices(starter func([]*ServiceConfig) error, entries ...*ServiceEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	services := mapServiceEntries(entries...)
+	beforeHandlers, afterHandlers := getHandlers(services)
+	e.afterHandlers = append(e.afterHandlers, afterHandlers...)
 	for _, before := range beforeHandlers {
 		if err := before(); err != nil {
 			logger.Fatal(err)
 		}
 	}
-	e.addShutdownHooks(entries, func(config *ServiceEntry, container *Container) {
+	e.addShutdownHooks(services, func(config *ServiceEntry, container *Container) {
 		if !config.DisableShutdownLogs {
 			PrintLogs(container)
 		}
 	})
-	err := e.compose.Up()
-	if err != nil {
-		e.Shutdown()
-		logger.Fatal(err)
+	configs := getServiceConfigs(entries...)
+	return starter(configs)
+}
+
+func (e *Environment) StopServices(services ...string) error {
+	configs := e.compose.getServiceConfigs(services...)
+	if len(configs) != len(services) {
+		return fmt.Errorf("can't stop unmanaged service contained in: %v", services)
 	}
-	err = e.invokeServiceHandlers(entries)
-	if err != nil {
-		e.Shutdown()
-		logger.Fatal(err)
+	err := e.compose.Stop(getServiceNames(configs)...)
+	if err == nil {
+		for _, service := range services {
+			delete(e.Services, service)
+		}
 	}
+	return err
 }
 
 // Shutdown MUST be used by tests' cleanup functions or there may be container leaks
@@ -89,6 +133,8 @@ func (e *Environment) Shutdown() {
 	for _, after := range e.afterHandlers {
 		after()
 	}
+	// reset
+	e.Services = make(map[string]interface{})
 }
 
 func (e *Environment) addShutdownHooks(entries map[string]*ServiceEntry, hook func(config *ServiceEntry, container *Container)) {
@@ -110,27 +156,27 @@ func (e *Environment) addShutdownHooks(entries map[string]*ServiceEntry, hook fu
 	}
 }
 
-func (e *Environment) invokeServiceHandlers(entries map[string]*ServiceEntry) error {
+func (e *Environment) invokeServiceHandlers(entries ...*ServiceEntry) error {
 	serviceOutputs := make(map[string]interface{})
-	for serviceName, config := range entries {
-		container, err := e.compose.GetContainer(serviceName)
+	for _, config := range entries {
+		container, err := e.compose.GetContainer(config.Name)
 		if err != nil {
 			return err
 		}
 		if container == nil {
-			return fmt.Errorf("no container found for service %s", serviceName)
+			return fmt.Errorf("no container found for service %s", config.Name)
 		}
 		var output interface{}
 		if config.Handler != nil {
-			logger.Infof("running handler for service %s", serviceName)
+			logger.Infof("running handler for service %s", config.Name)
 			output, err = config.Handler(container)
 			if err != nil {
 				return err
 			}
 		} else {
-			logger.Infof("no handler found for service %s", serviceName)
+			logger.Infof("no handler found for service %s", config.Name)
 		}
-		serviceOutputs[serviceName] = output
+		serviceOutputs[config.Name] = output
 	}
 	e.Services = serviceOutputs
 	return nil
@@ -144,7 +190,7 @@ func mapServiceEntries(entries ...*ServiceEntry) map[string]*ServiceEntry {
 	return services
 }
 
-func getServiceConfigs(entries map[string]*ServiceEntry) map[string]*ServiceConfig {
+func getServiceConfigsMap(entries map[string]*ServiceEntry) map[string]*ServiceConfig {
 	serviceConfigs := make(map[string]*ServiceConfig)
 	for serviceName, entry := range entries {
 		cfg := &ServiceConfig{
@@ -158,6 +204,30 @@ func getServiceConfigs(entries map[string]*ServiceEntry) map[string]*ServiceConf
 		serviceConfigs[serviceName] = cfg
 	}
 	return serviceConfigs
+}
+
+func getServiceConfigs(entries ...*ServiceEntry) []*ServiceConfig {
+	var serviceConfigs []*ServiceConfig
+	for _, entry := range entries {
+		cfg := &ServiceConfig{
+			Name:            entry.Name,
+			EnvironmentVars: entry.EnvironmentVars,
+			Network:         entry.Network,
+		}
+		if cfg.Network == "" {
+			cfg.Network = DefaultNetwork
+		}
+		serviceConfigs = append(serviceConfigs, cfg)
+	}
+	return serviceConfigs
+}
+
+func getServiceNames(configs []*ServiceConfig) []string {
+	var names []string
+	for _, config := range configs {
+		names = append(names, config.Name)
+	}
+	return names
 }
 
 func getHandlers(entries map[string]*ServiceEntry) ([]BeforeHandler, []AfterHandler) {
