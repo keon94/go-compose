@@ -47,7 +47,7 @@ func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Envi
 		compose: compose,
 	}
 	_ = env.compose.Down() //do this in case of a running state...
-	_ = env.setupServiceConfigs(entries...)
+	env.setupServiceConfigs(entries...)
 	err = env.compose.Up()
 	if err != nil {
 		env.Shutdown()
@@ -62,7 +62,8 @@ func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Envi
 }
 
 func (e *Environment) StartServices(entries ...*ServiceEntry) error {
-	configs := e.setupServiceConfigs(entries...)
+	e.setupServiceConfigs(entries...)
+	configs := getServiceConfigs(entries...)
 	err := e.compose.Start(configs...)
 	if err != nil {
 		if stopErr := e.StopServices(getServiceNames(configs)...); stopErr != nil {
@@ -110,9 +111,9 @@ func (e *Environment) Shutdown() {
 	e.Services = make(map[string]interface{})
 }
 
-func (e *Environment) setupServiceConfigs(entries ...*ServiceEntry) []*ServiceConfig {
+func (e *Environment) setupServiceConfigs(entries ...*ServiceEntry) {
 	if len(entries) == 0 {
-		return nil
+		return
 	}
 	services := mapServiceEntries(entries...)
 	beforeHandlers, afterHandlers := getHandlers(services)
@@ -127,7 +128,6 @@ func (e *Environment) setupServiceConfigs(entries ...*ServiceEntry) []*ServiceCo
 			PrintLogs(container)
 		}
 	})
-	return getServiceConfigs(entries...)
 }
 
 func (e *Environment) addShutdownHooks(entries map[string]*ServiceEntry, hook func(config *ServiceEntry, container *Container)) {
