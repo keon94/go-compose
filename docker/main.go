@@ -47,64 +47,37 @@ func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Envi
 		compose: compose,
 	}
 	_ = env.compose.Down() //do this in case of a running state...
-	err = env.startServices(func(configs []*ServiceConfig) error {
-		err = env.compose.Up()
-		if err != nil {
-			env.Shutdown()
-			return err
-		}
-		err = env.invokeServiceHandlers(entries...)
-		if err != nil {
-			env.Shutdown()
-			return err
-		}
-		return nil
-	}, entries...)
+	_ = env.setupServiceConfigs(entries...)
+	err = env.compose.Up()
 	if err != nil {
+		env.Shutdown()
+		logger.Fatal(err)
+	}
+	err = env.invokeServiceHandlers(entries...)
+	if err != nil {
+		env.Shutdown()
 		logger.Fatal(err)
 	}
 	return env
 }
 
 func (e *Environment) StartServices(entries ...*ServiceEntry) error {
-	return e.startServices(func(configs []*ServiceConfig) error {
-		err := e.compose.Start(configs...)
-		if err != nil {
-			if stopErr := e.StopServices(getServiceNames(configs)...); stopErr != nil {
-				logger.Warnf("could not call stop successfuly: %v", stopErr)
-			}
-			return err
+	configs := e.setupServiceConfigs(entries...)
+	err := e.compose.Start(configs...)
+	if err != nil {
+		if stopErr := e.StopServices(getServiceNames(configs)...); stopErr != nil {
+			logger.Warnf("could not call stop successfuly: %v", stopErr)
 		}
-		err = e.invokeServiceHandlers(entries...)
-		if err != nil {
-			if stopErr := e.StopServices(getServiceNames(configs)...); stopErr != nil {
-				logger.Warnf("could not call stop successfuly: %v", stopErr)
-			}
-			return err
-		}
-		return nil
-	}, entries...)
-}
-
-func (e *Environment) startServices(starter func([]*ServiceConfig) error, entries ...*ServiceEntry) error {
-	if len(entries) == 0 {
-		return nil
+		return err
 	}
-	services := mapServiceEntries(entries...)
-	beforeHandlers, afterHandlers := getHandlers(services)
-	e.afterHandlers = append(e.afterHandlers, afterHandlers...)
-	for _, before := range beforeHandlers {
-		if err := before(); err != nil {
-			logger.Fatal(err)
+	err = e.invokeServiceHandlers(entries...)
+	if err != nil {
+		if stopErr := e.StopServices(getServiceNames(configs)...); stopErr != nil {
+			logger.Warnf("could not call stop successfuly: %v", stopErr)
 		}
+		return err
 	}
-	e.addShutdownHooks(services, func(config *ServiceEntry, container *Container) {
-		if !config.DisableShutdownLogs {
-			PrintLogs(container)
-		}
-	})
-	configs := getServiceConfigs(entries...)
-	return starter(configs)
+	return nil
 }
 
 func (e *Environment) StopServices(services ...string) error {
@@ -135,6 +108,26 @@ func (e *Environment) Shutdown() {
 	}
 	// reset
 	e.Services = make(map[string]interface{})
+}
+
+func (e *Environment) setupServiceConfigs(entries ...*ServiceEntry) []*ServiceConfig {
+	if len(entries) == 0 {
+		return nil
+	}
+	services := mapServiceEntries(entries...)
+	beforeHandlers, afterHandlers := getHandlers(services)
+	e.afterHandlers = append(e.afterHandlers, afterHandlers...)
+	for _, before := range beforeHandlers {
+		if err := before(); err != nil {
+			logger.Fatal(err)
+		}
+	}
+	e.addShutdownHooks(services, func(config *ServiceEntry, container *Container) {
+		if !config.DisableShutdownLogs {
+			PrintLogs(container)
+		}
+	})
+	return getServiceConfigs(entries...)
 }
 
 func (e *Environment) addShutdownHooks(entries map[string]*ServiceEntry, hook func(config *ServiceEntry, container *Container)) {
