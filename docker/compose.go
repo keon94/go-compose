@@ -251,7 +251,7 @@ func (c *Compose) awaitStop(service *ServiceConfig, timeout <-chan time.Time) er
 }
 
 func (c *Compose) getEnvVariables() []string {
-	var envs []string
+	envs := os.Environ()
 	for _, cfg := range c.config.Services {
 		for k, v := range cfg.EnvironmentVars {
 			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
