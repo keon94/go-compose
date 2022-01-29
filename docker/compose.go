@@ -14,6 +14,8 @@ import (
 	"github.com/docker/docker/client"
 )
 
+const dockerComposeBin = "docker-compose"
+
 type (
 	// Compose an API to access docker-compose
 	Compose struct {
@@ -77,7 +79,7 @@ func (c *Compose) Up() error {
 	pathsArgs := c.getComposeFileArgs()
 	args := append(pathsArgs, []string{"-p", ProjectID, "up", "-d", "--renew-anon-volumes"}...)
 	args = append(args, c.getServiceNames()...)
-	cmd := exec.Command("docker-compose", args...)
+	cmd := exec.Command(dockerComposeBin, args...)
 	cmd.Env = c.getEnvVariables()
 	startTime := time.Now()
 	if err := runCommand(cmd, c.config.Env.UpTimeout); err != nil {
@@ -98,8 +100,8 @@ func (c *Compose) Start(services ...*ServiceConfig) error {
 	c.addServiceConfigs(services...)
 	pathsArgs := c.getComposeFileArgs()
 	args := append(pathsArgs, []string{"-p", ProjectID, "up", "-d"}...)
-	args = append(args, c.getServiceNames()...)
-	cmd := exec.Command("docker-compose", args...)
+	args = append(args, c.getServiceNames(services...)...)
+	cmd := exec.Command(dockerComposeBin, args...)
 	cmd.Env = c.getEnvVariables()
 	startTime := time.Now()
 	if err := runCommand(cmd, c.config.Env.UpTimeout); err != nil {
@@ -117,7 +119,7 @@ func (c *Compose) Stop(services ...string) error {
 	pathsArgs := c.getComposeFileArgs()
 	args := append(pathsArgs, []string{"-p", ProjectID, "rm", "-s", "-f"}...)
 	args = append(args, services...)
-	cmd := exec.Command("docker-compose", args...)
+	cmd := exec.Command(dockerComposeBin, args...)
 	startTime := time.Now()
 	if err := runCommand(cmd, c.config.Env.DownTimeout); err != nil {
 		return err
@@ -133,7 +135,7 @@ func (c *Compose) Stop(services ...string) error {
 func (c *Compose) Down() error {
 	pathsArgs := c.getComposeFileArgs()
 	args := append(pathsArgs, []string{"-p", ProjectID, "down", "-v"}...)
-	cmd := exec.Command("docker-compose", args...)
+	cmd := exec.Command(dockerComposeBin, args...)
 	startTime := time.Now()
 	if err := runCommand(cmd, c.config.Env.DownTimeout); err != nil {
 		return err
@@ -258,10 +260,20 @@ func (c *Compose) getEnvVariables() []string {
 	return envs
 }
 
-func (c *Compose) getServiceNames() []string {
+func (c *Compose) getServiceNames(services ...*ServiceConfig) []string {
 	var names []string
-	for name := range c.config.Services {
-		names = append(names, name)
+	contains := func(name string) bool {
+		for _, s := range services {
+			if s.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	for _, config := range c.config.Services {
+		if len(services) == 0 || contains(config.Name) {
+			names = append(names, config.Name)
+		}
 	}
 	return names
 }
