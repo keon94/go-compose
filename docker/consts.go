@@ -1,5 +1,8 @@
 package docker
 
-const ProjectID = "tests"
-const DefaultLabel = "integration"
-const DefaultNetwork = "tests"
+const (
+	ProjectID       = "tests"
+	DefaultLabel    = "integration"
+	DefaultNetwork  = "tests"
+	EnvHostOverride = "HOST_OVERRIDE"
+)
