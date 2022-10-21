@@ -1,3 +1,6 @@
+[![Circle-CI-Build](https://circleci.com/gh/keon94/go-compose.svg?style=shield)](https://app.circleci.com/pipelines/github/keon94/go-compose?branch=main)
+
+
 # go-compose
 An API in Go to wrap and manage docker-compose calls. It is intended for
 writing integration tests against one or more docker-compose files.
