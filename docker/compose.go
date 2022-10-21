@@ -85,7 +85,7 @@ func (c *Compose) Up() error {
 	if err := runCommand(cmd, c.config.Env.UpTimeout); err != nil {
 		return err
 	}
-	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
+	timeout := c.config.Env.UpTimeout - time.Since(startTime)
 	if err := awaitState(c.getServiceConfigs(), timeout, c.awaitStart); err != nil {
 		return fmt.Errorf("error with compose-up: %w", err)
 	}
@@ -107,7 +107,7 @@ func (c *Compose) Start(services ...*ServiceConfig) error {
 	if err := runCommand(cmd, c.config.Env.UpTimeout); err != nil {
 		return err
 	}
-	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
+	timeout := c.config.Env.UpTimeout - time.Since(startTime)
 	if err := awaitState(services, timeout, c.awaitStart); err != nil {
 		return fmt.Errorf("error with compose-up: %w", err)
 	}
@@ -124,7 +124,7 @@ func (c *Compose) Stop(services ...string) error {
 	if err := runCommand(cmd, c.config.Env.DownTimeout); err != nil {
 		return err
 	}
-	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
+	timeout := c.config.Env.UpTimeout - time.Since(startTime)
 	if err := awaitState(c.getServiceConfigs(services...), timeout, c.awaitStop); err != nil {
 		return fmt.Errorf("error with compose-down: %w", err)
 	}
@@ -140,7 +140,7 @@ func (c *Compose) Down() error {
 	if err := runCommand(cmd, c.config.Env.DownTimeout); err != nil {
 		return err
 	}
-	timeout := c.config.Env.UpTimeout - time.Now().Sub(startTime)
+	timeout := c.config.Env.UpTimeout - time.Since(startTime)
 	if err := awaitState(c.getServiceConfigs(), timeout, c.awaitStop); err != nil {
 		return fmt.Errorf("error with compose-down: %w", err)
 	}
@@ -192,13 +192,11 @@ func awaitState(services []*ServiceConfig, timeout time.Duration, serviceFn func
 		pool.Wait()
 		waiter <- nil
 	}()
-	select {
-	case <-waiter:
-		if !IsEmpty(errorMap) {
-			return fmt.Errorf("error waiting for services. errors captured: \n%v\n", PrintMap(errorMap))
-		}
-		return nil
+	<-waiter
+	if !IsEmpty(errorMap) {
+		return fmt.Errorf("error waiting for services. errors captured: \n%v\n", PrintMap(errorMap))
 	}
+	return nil
 }
 
 func (c *Compose) awaitStart(service *ServiceConfig, timeout <-chan time.Time) error {

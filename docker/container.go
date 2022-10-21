@@ -6,6 +6,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"io"
+	"os"
 	"runtime"
 	"strings"
 )
@@ -74,6 +75,9 @@ func (c *Container) Logs() (string, error) {
 	}
 	buf := new(strings.Builder)
 	_, err = io.Copy(buf, out)
+	if err != nil {
+		return "", err
+	}
 	return buf.String(), nil
 }
 
@@ -105,9 +109,8 @@ func (c *Container) Exec(cmd string) ([]string, error) {
 	return lines, nil
 }
 
-// GetEndpoints returns the public host, and map of private ports to list of public ports. May pass in optional
-// private ports as args to filter out the returned results. None implies return all.
-func (c *Container) GetEndpoints(privatePorts ...int) (Endpoints, error) {
+// GetEndpoints returns the public host, and map of private ports to list of public ports.
+func (c *Container) GetEndpoints() (Endpoints, error) {
 	network := c.Config.NetworkSettings.Networks[c.ServiceConfig.Network]
 	if network == nil {
 		return nil, fmt.Errorf("network not found for container %s", c.Config.Names[0])
@@ -120,7 +123,9 @@ func (c *Container) GetEndpoints(privatePorts ...int) (Endpoints, error) {
 		return nil, fmt.Errorf("error parsing ports for container %s", c.Config.Names[0])
 	}
 	host := "127.0.0.1"
-	if runtime.GOOS == "linux" && !isWSL() {
+	if override, ok := os.LookupEnv(EnvHostOverride); ok {
+		host = override //use this as a hack as a last resort
+	} else if runtime.GOOS == "linux" && !isWSL() {
 		host = network.Gateway
 	}
 	logger.Printf("container: %s is running on host: %s, port-bindings: %v", c.Config.Names[0], host, c.Config.Ports)
