@@ -11,6 +11,7 @@ type (
 		shutdownHooks []func()
 		afterHandlers []AfterHandler
 		compose       *Compose
+		noShutdown    bool
 	}
 	ServiceEntry struct {
 		//Name see ServiceConfig.Name
@@ -44,7 +45,8 @@ func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Envi
 		logger.Fatal(err)
 	}
 	env := &Environment{
-		compose: compose,
+		compose:    compose,
+		noShutdown: config.NoShutdown,
 	}
 	if !config.NoCleanup {
 		_ = env.compose.Down() //do this in case of a running state...
@@ -103,6 +105,9 @@ func (e *Environment) StopServices(services ...string) error {
 
 // Shutdown MUST be used by tests' cleanup functions or there may be container leaks
 func (e *Environment) Shutdown() {
+	if e.noShutdown {
+		return
+	}
 	for _, hook := range e.shutdownHooks {
 		hook()
 	}
