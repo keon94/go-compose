@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/docker/docker/api/types/container"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
@@ -33,6 +33,10 @@ type (
 		ComposeFilePaths []string
 		// Optional custom container label name
 		Label string
+		// If true it will ignore any existing containers that are running due to a previous run
+		NoCleanup bool
+		// If true it will not shut down the containers after the test
+		NoShutdown bool
 	}
 	// ServiceConfig service/container-level config needed for docker-compose purposes
 	ServiceConfig struct {
@@ -149,7 +153,7 @@ func (c *Compose) Down() error {
 }
 
 func (c *Compose) GetContainer(service string) (*Container, error) {
-	list, err := c.cli.ContainerList(context.Background(), types.ContainerListOptions{
+	list, err := c.cli.ContainerList(context.Background(), container.ListOptions{
 		All: true,
 		Filters: filters.NewArgs(
 			filters.Arg("label", c.config.Env.Label),

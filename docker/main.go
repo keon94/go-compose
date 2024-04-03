@@ -46,16 +46,22 @@ func StartEnvironment(config *EnvironmentConfig, entries ...*ServiceEntry) *Envi
 	env := &Environment{
 		compose: compose,
 	}
-	_ = env.compose.Down() //do this in case of a running state...
+	if !config.NoCleanup {
+		_ = env.compose.Down() //do this in case of a running state...
+	}
 	env.setupServiceConfigs(entries...)
 	err = env.compose.Up()
 	if err != nil {
-		env.Shutdown()
+		if !config.NoShutdown {
+			env.Shutdown()
+		}
 		logger.Fatal(err)
 	}
 	err = env.invokeServiceHandlers(entries...)
 	if err != nil {
-		env.Shutdown()
+		if !config.NoShutdown {
+			env.Shutdown()
+		}
 		logger.Fatal(err)
 	}
 	return env
