@@ -33,6 +33,10 @@ type (
 		ComposeFilePaths []string
 		// Optional custom container label name
 		Label string
+		// If true it will ignore any existing containers that are running due to a previous run
+		NoCleanup bool
+		// If true it will not shut down the containers after the test
+		NoShutdown bool
 	}
 	// ServiceConfig service/container-level config needed for docker-compose purposes
 	ServiceConfig struct {
