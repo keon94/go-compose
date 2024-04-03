@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"io"
 	"os"
@@ -69,7 +70,7 @@ func (c *Container) GetStatus() *ContainerStatus {
 }
 
 func (c *Container) Logs() (string, error) {
-	out, err := c.cli.ContainerLogs(context.Background(), c.Config.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
+	out, err := c.cli.ContainerLogs(context.Background(), c.Config.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
 	if err != nil {
 		return "", err
 	}
