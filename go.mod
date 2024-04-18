@@ -3,7 +3,7 @@ module github.com/keon94/go-compose
 go 1.20
 
 require (
-	github.com/docker/docker v26.0.0+incompatible
+	github.com/docker/docker v26.0.2+incompatible
 	github.com/sirupsen/logrus v1.9.3
 )
 
