@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"io"
@@ -16,7 +15,7 @@ type (
 	// Container wrapped API for docker containers
 	Container struct {
 		cli           *client.Client
-		Config        *types.Container
+		Config        *container.Summary
 		ServiceConfig *ServiceConfig
 	}
 )
@@ -84,7 +83,7 @@ func (c *Container) Logs() (string, error) {
 
 func (c *Container) Exec(cmd string) ([]string, error) {
 	ctx := context.Background()
-	resp, err := c.cli.ContainerExecCreate(ctx, c.Config.ID, types.ExecConfig{
+	resp, err := c.cli.ContainerExecCreate(ctx, c.Config.ID, container.ExecOptions{
 		Tty:          true,
 		AttachStdout: true,
 		Cmd:          []string{"sh", "-c", cmd},
@@ -92,7 +91,7 @@ func (c *Container) Exec(cmd string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	attach, err := c.cli.ContainerExecAttach(ctx, resp.ID, types.ExecStartCheck{
+	attach, err := c.cli.ContainerExecAttach(ctx, resp.ID, container.ExecAttachOptions{
 		Tty: true,
 	})
 	if err != nil {
