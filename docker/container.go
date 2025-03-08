@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"io"
@@ -16,7 +15,7 @@ type (
 	// Container wrapped API for docker containers
 	Container struct {
 		cli           *client.Client
-		Config        *types.Container
+		Config        *container.Summary
 		ServiceConfig *ServiceConfig
 	}
 )

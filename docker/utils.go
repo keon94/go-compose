@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/docker/docker/api/types/container"
 	"io"
 	"net"
 	"os"
@@ -13,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/docker/docker/api/types"
 )
 
 func FindOpenTcpPort() (string, error) {
@@ -159,7 +158,7 @@ func RunProcessWithLogs(cmd *exec.Cmd, logHandler func(msg string)) error {
 	return nil
 }
 
-func parsePorts(ports []types.Port) (map[int][]int, error) {
+func parsePorts(ports []container.Port) (map[int][]int, error) {
 	portMap := make(map[int][]int)
 	for _, port := range ports {
 		key := int(port.PrivatePort)

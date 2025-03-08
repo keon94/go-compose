@@ -102,3 +102,34 @@ func TestRedis_ManualStartStop2(t *testing.T) {
 	client2 := env.Services["redis"].(*redis.Client)
 	require.NotSame(t, client, client2)
 }
+
+func TestRedis_ContainerManipulation(t *testing.T) {
+	getContainer := func(container *docker.Container) (interface{}, error) {
+		_, err := GetRedisClient(container) // to make sure it's up
+		if err != nil {
+			return nil, err
+		}
+		return container, nil
+	}
+	env := docker.StartEnvironment(
+		&docker.EnvironmentConfig{
+			UpTimeout:        30 * time.Second,
+			DownTimeout:      30 * time.Second,
+			ComposeFilePaths: []string{"docker-compose.tests.yml"},
+		},
+		&docker.ServiceEntry{
+			Name:    "redis",
+			Handler: getContainer,
+		},
+	)
+	t.Cleanup(env.Shutdown)
+	container := env.Services["redis"].(*docker.Container)
+	output, err := container.Exec("echo 'Hello World'") // output pipe shares both stdout and stderr
+	require.NoError(t, err)
+	require.Len(t, output, 1)
+	require.Equal(t, "Hello World", output[0])
+	output, err = container.Exec("rm -rf /") // :D
+	require.NoError(t, err)
+	require.Greater(t, len(output), 100) // lots of messages
+	require.Contains(t, output[0], "rm: can't remove")
+}
