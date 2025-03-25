@@ -92,7 +92,7 @@ func ReadEnvFile(path string) (map[string]string, error) {
 
 func ColoredPrintf(color Color, msg string) {
 	colored := string(color) + strings.ReplaceAll(msg, "\n", "\n"+string(color)) + string(ColorReset)
-	fmt.Printf(colored + "\n")
+	fmt.Println(colored)
 }
 
 // IsEmpty for whatever reason they don't like to add a simple Size()/Length() method to this...
@@ -112,7 +112,7 @@ func PrintLogs(color Color, container *Container) {
 	} else {
 		ColoredPrintf(color, fmt.Sprintf("============================%s logs============================\n", container.Config.Names[0]))
 		ColoredPrintf(color, logs)
-		ColoredPrintf(color, fmt.Sprintf("===============================================================\n"))
+		ColoredPrintf(color, "===============================================================\n")
 	}
 }
 
@@ -123,7 +123,7 @@ func PrintContainerState(color Color, container *Container) {
 	} else {
 		ColoredPrintf(color, fmt.Sprintf("============================%s state============================\n", container.Config.Names[0]))
 		ColoredPrintf(color, state)
-		ColoredPrintf(color, fmt.Sprintf("================================================================\n"))
+		ColoredPrintf(color, "================================================================\n")
 	}
 }
 

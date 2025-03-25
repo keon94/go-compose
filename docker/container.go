@@ -88,7 +88,7 @@ func (c *Container) State() (string, error) {
 		return "", err
 	}
 	state := resp.State
-	b, err := json.Marshal(state)
+	b, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return "", err
 	}
