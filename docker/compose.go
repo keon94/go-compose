@@ -205,12 +205,12 @@ func awaitState(services []*ServiceConfig, timeout time.Duration, serviceFn func
 
 func (c *Compose) awaitStart(service *ServiceConfig, timeout <-chan time.Time) error {
 	for {
-		container, e := c.GetContainer(service.Name)
+		cntr, e := c.GetContainer(service.Name)
 		if e != nil {
 			return fmt.Errorf("error getting container for %s: %w", service, e)
 		}
-		if container != nil {
-			status := container.GetStatus()
+		if cntr != nil {
+			status := cntr.GetStatus()
 			if err := status.Error; err != nil {
 				return err
 			}
@@ -220,6 +220,10 @@ func (c *Compose) awaitStart(service *ServiceConfig, timeout <-chan time.Time) e
 		}
 		select {
 		case <-timeout:
+			if cntr != nil {
+				logger.Warnf("====================!!! service %s container logs !!!====================\n", service.Name)
+				PrintLogs(cntr)
+			}
 			return fmt.Errorf("service %s startup timed out", service.Name)
 		default:
 			time.Sleep(500 * time.Millisecond)
@@ -229,14 +233,14 @@ func (c *Compose) awaitStart(service *ServiceConfig, timeout <-chan time.Time) e
 
 func (c *Compose) awaitStop(service *ServiceConfig, timeout <-chan time.Time) error {
 	for {
-		container, e := c.GetContainer(service.Name)
+		cntr, e := c.GetContainer(service.Name)
 		if e != nil {
 			return fmt.Errorf("error getting container for %s: %w", service, e)
 		}
-		if container == nil {
+		if cntr == nil {
 			return nil
 		}
-		status := container.GetStatus()
+		status := cntr.GetStatus()
 		if err := status.Error; err != nil {
 			return err
 		}
@@ -245,6 +249,10 @@ func (c *Compose) awaitStop(service *ServiceConfig, timeout <-chan time.Time) er
 		}
 		select {
 		case <-timeout:
+			if cntr != nil {
+				logger.Warnf("====================!!! service %s container logs !!!====================\n", service.Name)
+				PrintLogs(cntr)
+			}
 			return fmt.Errorf("service %s shutdown timed out", service.Name)
 		default:
 			time.Sleep(500 * time.Millisecond)
