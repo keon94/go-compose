@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -79,6 +80,19 @@ func (c *Container) Logs() (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func (c *Container) State() (string, error) {
+	resp, err := c.cli.ContainerInspect(context.Background(), c.Config.ID)
+	if err != nil {
+		return "", err
+	}
+	state := resp.State
+	b, err := json.Marshal(state)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (c *Container) Exec(cmd string) ([]string, error) {
