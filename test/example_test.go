@@ -11,7 +11,7 @@ import (
 )
 
 func TestRedis(t *testing.T) {
-	env := docker.StartEnvironment(
+	env, err := docker.StartEnvironment(
 		&docker.EnvironmentConfig{
 			UpTimeout:        30 * time.Second,
 			DownTimeout:      30 * time.Second,
@@ -22,6 +22,7 @@ func TestRedis(t *testing.T) {
 			Handler: GetRedisClient,
 		},
 	)
+	require.NoError(t, err)
 	t.Cleanup(env.Shutdown)
 	client := env.Services["redis"].(*redis.Client)
 	client.Set("key", "value", 0)
@@ -31,17 +32,18 @@ func TestRedis(t *testing.T) {
 }
 
 func TestRedis_ManualStartStop1(t *testing.T) {
-	env := docker.StartEnvironment(
+	env, err := docker.StartEnvironment(
 		&docker.EnvironmentConfig{
 			UpTimeout:        30 * time.Second,
 			DownTimeout:      30 * time.Second,
 			ComposeFilePaths: []string{"docker-compose.tests.yml"},
 		},
 	)
+	require.NoError(t, err)
 	t.Cleanup(env.Shutdown)
 	require.Nil(t, env.Services["redis"])
 	// try stopping non-running service
-	err := env.StopServices("redis")
+	err = env.StopServices("redis")
 	require.Error(t, err)
 	// start the service
 	err = env.StartServices(&docker.ServiceEntry{
@@ -63,7 +65,7 @@ func TestRedis_ManualStartStop1(t *testing.T) {
 }
 
 func TestRedis_ManualStartStop2(t *testing.T) {
-	env := docker.StartEnvironment(
+	env, err := docker.StartEnvironment(
 		&docker.EnvironmentConfig{
 			UpTimeout:        30 * time.Second,
 			DownTimeout:      30 * time.Second,
@@ -74,6 +76,7 @@ func TestRedis_ManualStartStop2(t *testing.T) {
 			Handler: GetRedisClient,
 		},
 	)
+	require.NoError(t, err)
 	t.Cleanup(env.Shutdown)
 	require.NotNil(t, env.Services["redis"].(*redis.Client))
 	// try stopping non-running service
@@ -83,7 +86,7 @@ func TestRedis_ManualStartStop2(t *testing.T) {
 	// try stopping some fake service -> error
 	require.Error(t, env.StopServices("fake"))
 	// start the service
-	err := env.StartServices(&docker.ServiceEntry{
+	err = env.StartServices(&docker.ServiceEntry{
 		Name:    "redis",
 		Handler: GetRedisClient,
 	})
@@ -111,7 +114,7 @@ func TestRedis_ContainerManipulation(t *testing.T) {
 		}
 		return container, nil
 	}
-	env := docker.StartEnvironment(
+	env, err := docker.StartEnvironment(
 		&docker.EnvironmentConfig{
 			UpTimeout:        30 * time.Second,
 			DownTimeout:      30 * time.Second,
@@ -122,6 +125,7 @@ func TestRedis_ContainerManipulation(t *testing.T) {
 			Handler: getContainer,
 		},
 	)
+	require.NoError(t, err)
 	t.Cleanup(env.Shutdown)
 	container := env.Services["redis"].(*docker.Container)
 	output, err := container.Exec("echo 'Hello World'") // output pipe shares both stdout and stderr
