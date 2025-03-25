@@ -2,7 +2,6 @@ package docker
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
@@ -91,10 +90,9 @@ func ReadEnvFile(path string) (map[string]string, error) {
 
 }
 
-// ColoredPrintf Yellow only
-func ColoredPrintf(msg string) {
-	colored := "\033[1;33m%s\033[0m" //yellow
-	fmt.Printf(colored, msg)
+func ColoredPrintf(color Color, msg string) {
+	colored := string(color) + strings.ReplaceAll(msg, "\n", "\n"+string(color)) + string(ColorReset)
+	fmt.Printf(colored + "\n")
 }
 
 // IsEmpty for whatever reason they don't like to add a simple Size()/Length() method to this...
@@ -107,21 +105,26 @@ func IsEmpty(m *sync.Map) bool {
 	return empty
 }
 
-func PrintLogs(container *Container) {
+func PrintLogs(color Color, container *Container) {
 	logs, err := container.Logs()
 	if err != nil {
 		logger.Errorf("Couldn't get logs for service=%s", container.Config.Names[0])
 	} else {
-		ColoredPrintf(fmt.Sprintf("============================%s logs============================\n", container.Config.Names[0]))
-		fmt.Printf("%s\n", logs)
+		ColoredPrintf(color, fmt.Sprintf("============================%s logs============================\n", container.Config.Names[0]))
+		ColoredPrintf(color, logs)
+		ColoredPrintf(color, fmt.Sprintf("===============================================================\n"))
 	}
 }
 
-func Debug(i interface{}) {
-	fmt.Println("=============Debug info:============")
-	b, _ := json.Marshal(i)
-	fmt.Println(string(b))
-	fmt.Println("=============End of debug info============")
+func PrintContainerState(color Color, container *Container) {
+	state, err := container.State()
+	if err != nil {
+		logger.Errorf("Couldn't get logs for service=%s", container.Config.Names[0])
+	} else {
+		ColoredPrintf(color, fmt.Sprintf("============================%s state============================\n", container.Config.Names[0]))
+		ColoredPrintf(color, state)
+		ColoredPrintf(color, fmt.Sprintf("================================================================\n"))
+	}
 }
 
 func PrintMap(m *sync.Map) string {
@@ -170,7 +173,7 @@ func parsePorts(ports []container.Port) (map[int][]int, error) {
 
 func runCommand(cmd *exec.Cmd, timeout ...time.Duration) error {
 	if err := RunProcessWithLogs(cmd, func(msg string) {
-		ColoredPrintf(msg + "\n")
+		ColoredPrintf(GREEN, msg)
 	}); err != nil {
 		return err
 	}

@@ -136,7 +136,7 @@ func (e *Environment) setupServiceConfigs(entries ...*ServiceEntry) {
 	}
 	e.addShutdownHooks(services, func(config *ServiceEntry, container *Container) {
 		if !config.DisableShutdownLogs {
-			PrintLogs(container)
+			PrintLogs(GREEN, container)
 		}
 	})
 }

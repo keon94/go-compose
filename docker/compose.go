@@ -221,8 +221,8 @@ func (c *Compose) awaitStart(service *ServiceConfig, timeout <-chan time.Time) e
 		select {
 		case <-timeout:
 			if cntr != nil {
-				logger.Warnf("====================!!! service %s container logs !!!====================\n", service.Name)
-				PrintLogs(cntr)
+				PrintLogs(YELLOW, cntr)
+				PrintContainerState(YELLOW, cntr)
 			}
 			return fmt.Errorf("service %s startup timed out", service.Name)
 		default:
@@ -250,8 +250,8 @@ func (c *Compose) awaitStop(service *ServiceConfig, timeout <-chan time.Time) er
 		select {
 		case <-timeout:
 			if cntr != nil {
-				logger.Warnf("====================!!! service %s container logs !!!====================\n", service.Name)
-				PrintLogs(cntr)
+				PrintLogs(YELLOW, cntr)
+				PrintContainerState(YELLOW, cntr)
 			}
 			return fmt.Errorf("service %s shutdown timed out", service.Name)
 		default:
